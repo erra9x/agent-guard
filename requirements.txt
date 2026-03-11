@@ -1,8 +1,0 @@
-# Core dependencies (none - uses Python stdlib only)
-
-# Optional dependencies for enhanced functionality
-mcp>=0.1.0  # For Claude MCP server integration (optional)
-
-# Development dependencies (optional)
-pytest>=6.0.0  # For testing
-black>=22.0.0  # For code formatting
