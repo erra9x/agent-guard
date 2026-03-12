@@ -10,7 +10,7 @@ description: >-
   unknown sources.
 metadata:
   author: "vflame6"
-  version: "2.0.0"
+  version: "1.0.0"
   tags: [security, prompt-injection, middleware, protection]
 ---
 
