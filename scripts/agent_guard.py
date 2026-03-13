@@ -430,6 +430,29 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         (r'\bdocker\s+exec\b[^|;]*(?:/etc/|/root/|\.ssh/)', "high"),
     ]
 
+    # --- CI/CD pipeline injection ---
+    cicd = [
+        # GitHub Actions expression injection in run blocks
+        (r'run:\s*\$\{\{', "critical"),
+        # GitHub Actions workflow_dispatch with external inputs
+        (r'workflow_dispatch[\s\S]{0,500}\$\{\{\s*(?:github\.event|inputs\.)', "high"),
+        # Jenkins Groovy script injection
+        (r'new\s+GroovyShell\(\)\.evaluate\(', "critical"),
+        (r'groovy\.lang\.GroovyShell', "critical"),
+        # Jenkins execute with dangerous commands
+        (r'execute\s*\(\s*[\'"].*(?:curl|wget|bash)', "high"),
+        # GitLab CI include:remote from untrusted sources
+        (r'include:\s*-?\s*remote:\s*[\'"]?https?://', "high"),
+        # Terraform remote module loading
+        (r'module\s*"[^"]*"\s*\{[^}]*source\s*=\s*"(?:https?://|git::)', "high"),
+        # Ansible shell pipe-to-shell pattern
+        (r'shell:\s*\|.*(?:curl|wget).*\|.*(?:ba)?sh', "critical"),
+        # GitHub Actions artifact poisoning (download + execute)
+        (r'actions/download-artifact', "medium"),
+        # Codecov-style supply chain (process substitution pipe-to-bash)
+        (r'bash\s+<\(curl\s+-s\s+https://', "critical"),
+    ]
+
     # --- Credential detection ---
     raw_patterns = {
         "execution": execution,
@@ -440,6 +463,7 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         "encoding": encoding,
         "rendering": rendering,
         "container": container,
+        "cicd": cicd,
     }
 
     compiled: Dict[str, List[Tuple[re.Pattern, str]]] = {}
@@ -767,7 +791,7 @@ class AgentGuard:
             "encoding": 0.8,
             "rendering": 1.0,
             "container": 1.5,
-
+            "cicd": 1.2,
         }
 
         score = 0.0
@@ -823,7 +847,7 @@ class AgentGuard:
             "encoding": "[BLOCKED_ENCODING]",
             "rendering": "[BLOCKED_CHAR]",
             "container": "[BLOCKED_CONTAINER]",
-
+            "cicd": "[BLOCKED_CICD]",
         }
         seen_patterns: set = set()
         for m in matches:

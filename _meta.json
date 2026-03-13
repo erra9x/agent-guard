@@ -1,0 +1,20 @@
+{
+  "name": "agent-guard",
+  "version": "1.0.1",
+  "description": "Real-time prompt injection and command injection detection for OpenClaw agents.",
+  "author": "vflame6",
+  "license": "MIT",
+  "homepage": "https://github.com/erra9x/agent-guard",
+  "compatibility": {
+    "os": ["macos", "linux", "windows"],
+    "runtime": ["python3"]
+  },
+  "allowed-tools": ["exec", "read"],
+  "tags": ["security", "prompt-injection", "middleware", "protection"],
+  "openclaw": {
+    "emoji": "🛡️",
+    "requires": {
+      "bins": ["python3"]
+    }
+  }
+}

