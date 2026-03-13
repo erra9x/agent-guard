@@ -411,33 +411,6 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
     ]
 
     # --- Credential detection ---
-    credential = [
-        # AWS access keys
-        (r'AKIA[0-9A-Z]{16}', "critical"),
-        # AWS secret keys
-        (r'aws_secret_access_key\s*[:=]\s*["\']?[A-Za-z0-9/+=]{40}\b', "critical"),
-        # GitHub tokens
-        (r'gh[pors]_[0-9a-zA-Z]{36}', "critical"),
-        # GitLab tokens
-        (r'glpat-[0-9a-zA-Z\-_]{20}', "critical"),
-        # Generic API keys
-        (r'api[_\-]?key\s*[:=]\s*["\']?[a-zA-Z0-9]{20,}', "high"),
-        # Bearer tokens
-        (r'[Aa]uthorization:\s*[Bb]earer\s+[a-zA-Z0-9\-_.~+/]+=*', "high"),
-        # Private keys
-        (r'-----BEGIN\s+(?:RSA|EC|OPENSSH|DSA|PGP)\s+PRIVATE\s+KEY-----', "critical"),
-        # Connection strings
-        (r'(?:postgresql|mysql|mongodb|redis|amqp)://[^\s\'"]+', "high"),
-        # Slack tokens
-        (r'xox[bpors]-[0-9a-zA-Z\-]+', "critical"),
-        # Google API keys
-        (r'AIza[0-9A-Za-z\-_]{35}', "critical"),
-        # Stripe keys
-        (r'sk_(?:live|test)_[0-9a-zA-Z]{24,}', "critical"),
-        # JWT tokens
-        (r'eyJ[a-zA-Z0-9\-_]+\.eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+', "high"),
-    ]
-
     raw_patterns = {
         "execution": execution,
         "injection": injection + multilang_injection,
@@ -447,7 +420,6 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         "encoding": encoding,
         "rendering": rendering,
         "container": container,
-        "credential": credential,
     }
 
     compiled: Dict[str, List[Tuple[re.Pattern, str]]] = {}
@@ -775,7 +747,7 @@ class AgentGuard:
             "encoding": 0.8,
             "rendering": 1.0,
             "container": 1.5,
-            "credential": 2.0,
+
         }
 
         score = 0.0
@@ -831,7 +803,7 @@ class AgentGuard:
             "encoding": "[BLOCKED_ENCODING]",
             "rendering": "[BLOCKED_CHAR]",
             "container": "[BLOCKED_CONTAINER]",
-            "credential": "[BLOCKED_CREDENTIAL]",
+
         }
         seen_patterns: set = set()
         for m in matches:
