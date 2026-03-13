@@ -381,6 +381,63 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         (r'https?://[^\s]*(?:xn--)[^\s]+', "medium"),
     ]
 
+    # --- Container/Docker injection ---
+    container = [
+        # Privileged containers
+        (r'\bdocker\s+run\b[^|;]*--privileged\b', "critical"),
+        # Mounting root filesystem
+        (r'\bdocker\s+run\b[^|;]*-v\s+/\s*:', "critical"),
+        # Dangerous capabilities
+        (r'--cap-add\s*=\s*(?:ALL|SYS_ADMIN)\b', "critical"),
+        # Host namespace sharing
+        (r'--pid\s*=\s*host\b', "high"),
+        (r'--net\s*=\s*host\b', "high"),
+        # Dockerfile pipe-to-shell
+        (r'\bRUN\s+(?:curl|wget)\s+[^\n|]+\|\s*(?:ba)?sh\b', "critical"),
+        # docker-compose privileged
+        (r'privileged\s*:\s*true\b', "critical"),
+        # docker-compose host network
+        (r'network_mode\s*:\s*["\']?host["\']?\b', "high"),
+        # Sensitive volume mounts
+        (r'(?:-v|volumes?\s*:)[^|;]*(?:/etc|/root|/var/run/docker\.sock)\s*:', "critical"),
+        # Security opt bypass
+        (r'--security-opt\s+(?:no-new-privileges\s*:\s*false|apparmor\s*=\s*unconfined)\b', "high"),
+        # Docker save/export piped to remote
+        (r'\bdocker\s+(?:save|export)\b[^|;]*\|\s*(?:curl|wget|nc|ssh)\b', "high"),
+        # Docker cp to sensitive host paths
+        (r'\bdocker\s+cp\b[^|;]*(?:/etc/|/root/|/var/run/)', "high"),
+        # docker exec with sensitive paths
+        (r'\bdocker\s+exec\b[^|;]*(?:/etc/|/root/|\.ssh/)', "high"),
+    ]
+
+    # --- Credential detection ---
+    credential = [
+        # AWS access keys
+        (r'AKIA[0-9A-Z]{16}', "critical"),
+        # AWS secret keys
+        (r'aws_secret_access_key\s*[:=]\s*["\']?[A-Za-z0-9/+=]{40}\b', "critical"),
+        # GitHub tokens
+        (r'gh[pors]_[0-9a-zA-Z]{36}', "critical"),
+        # GitLab tokens
+        (r'glpat-[0-9a-zA-Z\-_]{20}', "critical"),
+        # Generic API keys
+        (r'api[_\-]?key\s*[:=]\s*["\']?[a-zA-Z0-9]{20,}', "high"),
+        # Bearer tokens
+        (r'[Aa]uthorization:\s*[Bb]earer\s+[a-zA-Z0-9\-_.~+/]+=*', "high"),
+        # Private keys
+        (r'-----BEGIN\s+(?:RSA|EC|OPENSSH|DSA|PGP)\s+PRIVATE\s+KEY-----', "critical"),
+        # Connection strings
+        (r'(?:postgresql|mysql|mongodb|redis|amqp)://[^\s\'"]+', "high"),
+        # Slack tokens
+        (r'xox[bpors]-[0-9a-zA-Z\-]+', "critical"),
+        # Google API keys
+        (r'AIza[0-9A-Za-z\-_]{35}', "critical"),
+        # Stripe keys
+        (r'sk_(?:live|test)_[0-9a-zA-Z]{24,}', "critical"),
+        # JWT tokens
+        (r'eyJ[a-zA-Z0-9\-_]+\.eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+', "high"),
+    ]
+
     raw_patterns = {
         "execution": execution,
         "injection": injection + multilang_injection,
@@ -389,6 +446,8 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         "network": network,
         "encoding": encoding,
         "rendering": rendering,
+        "container": container,
+        "credential": credential,
     }
 
     compiled: Dict[str, List[Tuple[re.Pattern, str]]] = {}
@@ -715,6 +774,8 @@ class AgentGuard:
             "network": 1.5,
             "encoding": 0.8,
             "rendering": 1.0,
+            "container": 1.5,
+            "credential": 2.0,
         }
 
         score = 0.0
@@ -769,6 +830,8 @@ class AgentGuard:
             "network": "[BLOCKED_NETWORK]",
             "encoding": "[BLOCKED_ENCODING]",
             "rendering": "[BLOCKED_CHAR]",
+            "container": "[BLOCKED_CONTAINER]",
+            "credential": "[BLOCKED_CREDENTIAL]",
         }
         seen_patterns: set = set()
         for m in matches:
