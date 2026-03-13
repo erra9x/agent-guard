@@ -287,6 +287,12 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         (r'<span\s+style\s*=\s*["\'](?:font-size\s*:\s*0|visibility\s*:\s*hidden|display\s*:\s*none)["\']', "high"),
         # Tool-use manipulation
         (r'(?:override|change|modify|set)\s+(?:the\s+)?(?:tool|function)\s+(?:parameters?|args?|arguments?)', "high"),
+        # RAG / data extraction scope expansion
+        (r'show\s+(?:me\s+)?(?:all\s+)?(?:documents?|files?|data)\s+(?:you\s+have\s+)?access\s+to', "high"),
+        (r'(?:list|display|dump|reveal)\s+(?:all\s+)?(?:your\s+)?(?:available|accessible)\s+(?:documents?|files?|data|resources?)', "high"),
+        (r'including\s+(?:those\s+)?(?:marked|labeled|tagged)\s+(?:as\s+)?["\']?(?:confidential|restricted|private|internal|secret)', "critical"),
+        (r'what\s+(?:did|does?)\s+(?:the\s+)?previous\s+user\s+', "high"),
+        (r'(?:show|display|reveal|tell)\s+(?:me\s+)?(?:the\s+)?(?:system|internal|hidden)\s+(?:prompt|instructions?|config)', "critical"),
     ]
 
     # --- Multi-language injection patterns ---
@@ -324,6 +330,20 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         (r'(?:this\s+is\s+)?standard\s+(?:procedure|protocol|practice)', "low"),
         (r'expires?\s+in\s+\d+\s+(?:minutes?|hours?|seconds?)', "low"),
         (r'time[- ]?sensitive\s+|limited\s+time\s+', "low"),
+        # System error / maintenance mode simulation
+        (r'(?:ERROR|ALERT|WARNING):\s*(?:system\s+)?(?:malfunction|failure|crash)\s+detected', "high"),
+        (r'entering\s+(?:maintenance|debug|diagnostic|recovery)\s+mode', "high"),
+        (r'ADMIN[_\s]?OVERRIDE\b', "critical"),
+        (r'DEBUG:\s*(?:show|display|dump|print)\s+(?:system|config|all)', "high"),
+        (r'(?:authorized|approved)\s+(?:maintenance|debug)\s+request\b', "high"),
+        (r'(?:MAINT|TICKET|AUTH|REQ)[_\-][A-Z0-9]{4,}', "medium"),
+        # Developer/researcher impersonation
+        (r'(?:as\s+(?:a|the)\s+)?developer\s+of\s+this\s+system\b', "high"),
+        (r'(?:i\s+(?:am|have)\s+)?(?:legitimate|authorized)\s+access\b', "high"),
+        (r'(?:security\s+)?researcher\s+with\s+(?:legitimate|authorized)\s+access', "high"),
+        # Translation injection (two-step attack)
+        (r'(?:translate|convert)\b.{0,80}(?:now\s+)?(?:execute|run|follow|perform|do)\s+(?:the\s+)?(?:translat|command|instruct)', "high"),
+        (r'(?:now|then)\s+(?:execute|run|follow|perform)\s+(?:the\s+)?(?:translated|above|result)', "high"),
     ]
 
     # --- Filesystem manipulation ---
@@ -381,6 +401,36 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         (r'https?://[^\s]*(?:xn--)[^\s]+', "medium"),
     ]
 
+    # --- Container/Docker injection ---
+    container = [
+        # Privileged containers
+        (r'\bdocker\s+run\b[^|;]*--privileged\b', "critical"),
+        # Mounting root filesystem
+        (r'\bdocker\s+run\b[^|;]*-v\s+/\s*:', "critical"),
+        # Dangerous capabilities
+        (r'--cap-add\s*=\s*(?:ALL|SYS_ADMIN)\b', "critical"),
+        # Host namespace sharing
+        (r'--pid\s*=\s*host\b', "high"),
+        (r'--net\s*=\s*host\b', "high"),
+        # Dockerfile pipe-to-shell
+        (r'\bRUN\s+(?:curl|wget)\s+[^\n|]+\|\s*(?:ba)?sh\b', "critical"),
+        # docker-compose privileged
+        (r'privileged\s*:\s*true\b', "critical"),
+        # docker-compose host network
+        (r'network_mode\s*:\s*["\']?host["\']?\b', "high"),
+        # Sensitive volume mounts
+        (r'(?:-v|volumes?\s*:)[^|;]*(?:/etc|/root|/var/run/docker\.sock)\s*:', "critical"),
+        # Security opt bypass
+        (r'--security-opt\s+(?:no-new-privileges\s*:\s*false|apparmor\s*=\s*unconfined)\b', "high"),
+        # Docker save/export piped to remote
+        (r'\bdocker\s+(?:save|export)\b[^|;]*\|\s*(?:curl|wget|nc|ssh)\b', "high"),
+        # Docker cp to sensitive host paths
+        (r'\bdocker\s+cp\b[^|;]*(?:/etc/|/root/|/var/run/)', "high"),
+        # docker exec with sensitive paths
+        (r'\bdocker\s+exec\b[^|;]*(?:/etc/|/root/|\.ssh/)', "high"),
+    ]
+
+    # --- Credential detection ---
     raw_patterns = {
         "execution": execution,
         "injection": injection + multilang_injection,
@@ -389,6 +439,7 @@ def _build_patterns() -> Dict[str, List[Tuple["re.Pattern[str]", str]]]:
         "network": network,
         "encoding": encoding,
         "rendering": rendering,
+        "container": container,
     }
 
     compiled: Dict[str, List[Tuple[re.Pattern, str]]] = {}
@@ -715,6 +766,8 @@ class AgentGuard:
             "network": 1.5,
             "encoding": 0.8,
             "rendering": 1.0,
+            "container": 1.5,
+
         }
 
         score = 0.0
@@ -769,6 +822,8 @@ class AgentGuard:
             "network": "[BLOCKED_NETWORK]",
             "encoding": "[BLOCKED_ENCODING]",
             "rendering": "[BLOCKED_CHAR]",
+            "container": "[BLOCKED_CONTAINER]",
+
         }
         seen_patterns: set = set()
         for m in matches:
