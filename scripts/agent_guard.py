@@ -28,7 +28,7 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # --- Constants ---
 
